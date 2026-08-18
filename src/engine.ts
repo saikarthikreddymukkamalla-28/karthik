@@ -98,7 +98,12 @@ export function recommend(profile: StudentProfile, all: Reel[], current?: Reel):
     const engagement = reel.entertainmentValue*0.35 + reel.educationalValue*0.65;
     const {penalty} = hypeGuard(reel);
     const score = interest*.25 + (100-skill)*.25 + fit*.15 + reel.educationalValue*.15 + reel.careerRelevance*.08 + engagement*.07 + novelty*.05 - penalty;
-    const confidence = profile.interactions.length >= 10 ? "High" : profile.interactions.length >= 5 ? "Medium" : "Low";
+    const confidence: "High" | "Medium" | "Low" =
+  profile.interactions.length >= 10
+    ? "High"
+    : profile.interactions.length >= 5
+      ? "Medium"
+      : "Low";
     return {
       reel, score: Math.round(score*10)/10,
       breakdown:{
