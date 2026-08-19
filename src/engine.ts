@@ -22,6 +22,9 @@ const interestMap: Record<string, string[]> = {
   "Machine Learning":["AI"],
   Python:["Programming","AI"],
   Git:["Software Engineering","Cloud"],
+  Funny:["Funny","Developer Culture"],
+  Humor:["Funny","Developer Culture"],
+  "Developer Culture":["Funny","Software Engineering"],
 };
 
 function clamp(n:number,min=0,max=100){ return Math.max(min, Math.min(max,n)); }
@@ -48,7 +51,8 @@ export function applyInteraction(profile: StudentProfile, reel: Reel, interactio
 
   const skillTargets: Record<string,string[]> = {
     Java:["Java"], DSA:["DSA","Algorithms"], AI:["AI"], Cloud:["Cloud"],
-    Cybersecurity:["Cybersecurity"], HLD:["System Design"], Programming:["Python","DSA"]
+    Cybersecurity:["Cybersecurity"], HLD:["System Design"], Programming:["Python","DSA"],
+    Funny:[]
   };
   const targets = skillTargets[reel.category] || ["Software Engineering"];
   const learningSignal = Math.max(0, interaction.watchPercentage / 100) * (reel.technicalDepth/100);
@@ -118,10 +122,43 @@ export function recommend(profile: StudentProfile, all: Reel[], current?: Reel):
       confidence,
       reason: buildReason(reel, profile, interest, skill)
     };
-  }).sort((a,b)=>b.score-a.score).slice(0,8);
+  }).sort((a,b)=>b.score-a.score);
+}
+
+// Function to interleave funny reels periodically into tech recommendations feed
+export function getInterleavedFeed(
+  profile: StudentProfile,
+  all: Reel[],
+  funnyInterval: number = 3
+): Reel[] {
+  const techReels = all.filter(r => !r.isFunny && r.category !== "Funny");
+  const funnyReels = all.filter(r => r.isFunny || r.category === "Funny");
+
+  const rankedTech = recommend(profile, techReels).map(r => r.reel);
+
+  if (funnyInterval <= 0 || funnyReels.length === 0) {
+    return rankedTech;
+  }
+
+  const result: Reel[] = [];
+  let funnyIdx = 0;
+
+  for (let i = 0; i < rankedTech.length; i++) {
+    result.push(rankedTech[i]);
+    if ((i + 1) % funnyInterval === 0) {
+      const funnyReel = funnyReels[funnyIdx % funnyReels.length];
+      result.push(funnyReel);
+      funnyIdx++;
+    }
+  }
+
+  return result;
 }
 
 function buildReason(reel:Reel, profile:StudentProfile, interest:number, skill:number){
+  if (reel.isFunny || reel.category === "Funny") {
+    return "😂 Funny Tech Intermission: Added to keep your scroll engaging and entertaining while you learn!";
+  }
   const top = Object.entries(profile.interests).sort((a,b)=>b[1]-a[1])[0]?.[0] ?? "technology";
   if(reel.id==="r6") return `Your scrolling combines Java, coding-interview and software-engineering signals. The AI is broadening the Java signal into ${top === "Java" ? "Software Engineering / Technology" : top}.`;
   if(reel.hypeScore>=80) return "This candidate was heavily penalized by the Hype Guard because its claims are stronger than its technical depth.";

@@ -1,6 +1,6 @@
 export type Category =
   | "AI" | "DSA" | "Java" | "HLD" | "Cybersecurity"
-  | "Cloud" | "Hardware" | "Career" | "Programming" | "Other";
+  | "Cloud" | "Hardware" | "Career" | "Programming" | "Funny" | "Other";
 
 export type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -21,6 +21,12 @@ export interface Reel {
   duration: number;
   description: string;
   gradient: string;
+  // Imported video fields
+  sourceUrl?: string;
+  embedType?: "youtube" | "instagram" | "direct";
+  youtubeId?: string;
+  isFunny?: boolean;
+  isUserImported?: boolean;
 }
 
 export interface Interaction {

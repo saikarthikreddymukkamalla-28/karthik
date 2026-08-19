@@ -2,25 +2,34 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowRight, BarChart3, Brain, CheckCircle2, ChevronRight, CirclePlay,
   Cloud, Code2, Cpu, Gauge, Heart, Home, Info, LayoutDashboard, LineChart,
-  LockKeyhole, Menu, Network, Play, RefreshCw, Save, Search, ShieldCheck,
-  Sparkles, Target, TrendingUp, Trophy, Video, X, Zap
+  LockKeyhole, Menu, Network, Play, Plus, RefreshCw, Save, Search, ShieldCheck,
+  Sparkles, Target, TrendingUp, Trophy, Video, X, Zap, Laugh, ExternalLink, Film
 } from "lucide-react";
 import { Line, LineChart as RLineChart, ResponsiveContainer, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
-import { reels } from "./data";
-import { applyInteraction, createInitialProfile, detectGap, detectInterest, hypeGuard, recommend, Recommendation } from "./engine";
-import { Interaction, Reel, StudentProfile } from "./types";
+import { parseVideoUrl, reels as defaultReels } from "./data";
+import { applyInteraction, createInitialProfile, detectGap, detectInterest, getInterleavedFeed, hypeGuard, recommend, Recommendation } from "./engine";
+import { Category, Difficulty, Interaction, Reel, StudentProfile } from "./types";
 
 type Page = "home"|"dashboard"|"feed"|"recommendations"|"learning"|"profile"|"analytics"|"architecture";
 
-const STORAGE = "techscroll-ai-profile-v1";
+const STORAGE_PROFILE = "techscroll-ai-profile-v1";
+const STORAGE_REELS = "techscroll-ai-custom-reels-v1";
 
 function loadProfile(): StudentProfile {
   try {
-    const raw = localStorage.getItem(STORAGE);
+    const raw = localStorage.getItem(STORAGE_PROFILE);
     return raw ? JSON.parse(raw) : createInitialProfile();
   } catch { return createInitialProfile(); }
 }
-function saveProfile(p: StudentProfile){ localStorage.setItem(STORAGE, JSON.stringify(p)); }
+function saveProfile(p: StudentProfile){ localStorage.setItem(STORAGE_PROFILE, JSON.stringify(p)); }
+
+function loadCustomReels(): Reel[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_REELS);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveCustomReels(r: Reel[]){ localStorage.setItem(STORAGE_REELS, JSON.stringify(r)); }
 
 const nav = [
   ["dashboard","Dashboard",LayoutDashboard],["feed","Reel Feed",Video],["recommendations","AI Recommendations",Sparkles],
@@ -30,15 +39,20 @@ const nav = [
 function App(){
   const [page,setPage] = useState<Page>("home");
   const [profile,setProfile] = useState<StudentProfile>(loadProfile);
+  const [customReels,setCustomReels] = useState<Reel[]>(loadCustomReels);
+  const [funnyInterval,setFunnyInterval] = useState<number>(3);
+  const [showImportModal,setShowImportModal] = useState(false);
   const [toast,setToast] = useState("");
   const [demo,setDemo] = useState(false);
   const [demoStep,setDemoStep] = useState(0);
   const [sidebar,setSidebar] = useState(false);
 
   useEffect(()=>saveProfile(profile),[profile]);
-  useEffect(()=>{ if(toast){const t=setTimeout(()=>setToast(""),2400);return()=>clearTimeout(t)}},[toast]);
+  useEffect(()=>saveCustomReels(customReels),[customReels]);
+  useEffect(()=>{ if(toast){const t=setTimeout(()=>setToast(""),2600);return()=>clearTimeout(t)}},[toast]);
 
-  const recs = useMemo(()=>recommend(profile,reels),[profile]);
+  const allReels = useMemo(()=>[...defaultReels, ...customReels],[customReels]);
+  const recs = useMemo(()=>recommend(profile,allReels),[profile,allReels]);
   const interest = detectInterest(profile);
   const gap = detectGap(profile);
 
@@ -62,6 +76,11 @@ function App(){
     setToast("Profile reset — the AI is learning from scratch");
   }
 
+  function handleAddReel(newReel: Reel){
+    setCustomReels(prev=>[newReel, ...prev]);
+    setToast(`✨ Imported "${newReel.title}" into feed!`);
+  }
+
   function launchDemo(){
     setPage("dashboard"); setDemo(true); setDemoStep(0);
   }
@@ -70,7 +89,7 @@ function App(){
     setDemoStep(step);
     const ids=["r1","r2","r3","r4","r5","r6","r9","r18","r10","r19"];
     const id=ids[Math.min(step,ids.length-1)];
-    const reel=reels.find(r=>r.id===id);
+    const reel=allReels.find(r=>r.id===id);
     if(reel && step<4) interact(reel,{watchPercentage:[94,87,91,82][step],watchDuration:reel.duration*.8});
     if(reel && step===4) interact(reel,{watchPercentage:90,watchDuration:reel.duration});
     if(reel && step===5) interact(reel,{watchPercentage:96,watchDuration:reel.duration});
@@ -80,10 +99,10 @@ function App(){
     <style>{`@keyframes pulseGlow{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}`}</style>
     {page!=="home" && <Sidebar page={page} setPage={setPage} open={sidebar} setOpen={setSidebar} onReset={reset}/>}
     <main className={page==="home"?"":"main"}>
-      {page!=="home" && <Topbar page={page} setSidebar={setSidebar} interest={interest} onDemo={launchDemo}/>}
+      {page!=="home" && <Topbar page={page} setSidebar={setSidebar} interest={interest} onDemo={launchDemo} onOpenImport={()=>setShowImportModal(true)}/>}
       {page==="home" && <Landing setPage={setPage} onDemo={launchDemo}/>}
-      {page==="dashboard" && <Dashboard profile={profile} interest={interest} gap={gap} recs={recs} setPage={setPage} onInteract={interact} />}
-      {page==="feed" && <Feed onInteract={interact} profile={profile}/>}
+      {page==="dashboard" && <Dashboard profile={profile} interest={interest} gap={gap} recs={recs} setPage={setPage} onInteract={interact} onOpenImport={()=>setShowImportModal(true)} />}
+      {page==="feed" && <Feed onInteract={interact} profile={profile} allReels={allReels} funnyInterval={funnyInterval} setFunnyInterval={setFunnyInterval} onOpenImport={()=>setShowImportModal(true)}/>}
       {page==="recommendations" && <Recommendations recs={recs} profile={profile} onInteract={interact}/>}
       {page==="learning" && <Learning profile={profile} gap={gap} recs={recs}/>}
       {page==="profile" && <Profile profile={profile} interest={interest}/>}
@@ -91,6 +110,7 @@ function App(){
       {page==="architecture" && <Architecture/>}
     </main>
     {toast && <div className="toast"><Sparkles size={16}/>{toast}</div>}
+    {showImportModal && <ImportModal onAddReel={handleAddReel} close={()=>setShowImportModal(false)}/>}
     {demo && <DemoOverlay step={demoStep} setStep={(s)=>{runDemoStep(s)}} close={()=>setDemo(false)}/>}
   </div>
 }
@@ -107,9 +127,17 @@ function Sidebar({page,setPage,open,setOpen,onReset}:{page:Page;setPage:(p:Page)
   </aside>
 }
 
-function Topbar({page,setSidebar,interest,onDemo}:{page:Page;setSidebar:(x:boolean)=>void;interest:{name:string;confidence:number};onDemo:()=>void}){
+function Topbar({page,setSidebar,interest,onDemo,onOpenImport}:{page:Page;setSidebar:(x:boolean)=>void;interest:{name:string;confidence:number};onDemo:()=>void;onOpenImport:()=>void}){
   const label=nav.find(n=>n[0]===page)?.[1] || "Dashboard";
-  return <header className="topbar"><button className="mobileMenu" onClick={()=>setSidebar(true)}><Menu/></button><div><div className="crumb">TechScroll AI <span>/</span> {label}</div><h2>{label}</h2></div><div className="topActions"><div className="miniInterest"><span>AI understands</span><b>{interest.name}</b><em>{interest.confidence}%</em></div><button className="demoBtn" onClick={onDemo}><Play size={15} fill="currentColor"/> Live Demo</button></div></header>
+  return <header className="topbar">
+    <button className="mobileMenu" onClick={()=>setSidebar(true)}><Menu/></button>
+    <div><div className="crumb">TechScroll AI <span>/</span> {label}</div><h2>{label}</h2></div>
+    <div className="topActions">
+      <button className="importBtn" onClick={onOpenImport}><Plus size={15}/> Import Video</button>
+      <div className="miniInterest"><span>AI understands</span><b>{interest.name}</b><em>{interest.confidence}%</em></div>
+      <button className="demoBtn" onClick={onDemo}><Play size={15} fill="currentColor"/> Live Demo</button>
+    </div>
+  </header>
 }
 
 function Landing({setPage,onDemo}:{setPage:(p:Page)=>void;onDemo:()=>void}){
@@ -117,17 +145,17 @@ function Landing({setPage,onDemo}:{setPage:(p:Page)=>void;onDemo:()=>void}){
     <div className="heroGlow"></div>
     <nav className="landingNav"><div className="brand"><div className="logo"><Sparkles size={19}/></div><b>TechScroll <span>AI</span></b></div><div className="landingLinks"><a href="#how">How it works</a><a href="#why">Why TechScroll</a><a href="#demo">Demo</a></div><button className="outlineBtn" onClick={()=>setPage("dashboard")}>Open App <ArrowRight size={15}/></button></nav>
     <section className="hero">
-      <div className="heroCopy"><div className="eyebrow"><i></i> ADAPTIVE TECH DISCOVERY</div><h1>Make your<br/><span>scroll smarter.</span></h1><p>TechScroll AI watches how you interact with short-form content, understands your deeper interests, and recommends what you should learn next.</p><div className="heroButtons"><button className="primaryBtn" onClick={()=>setPage("feed")}><CirclePlay size={18}/> Start Scrolling</button><button className="ghostBtn" onClick={onDemo}><Zap size={17}/> Launch AI Demo</button></div><div className="heroStats"><div><b>Passive</b><span>No manual history</span></div><div><b>Semantic</b><span>Beyond keywords</span></div><div><b>Adaptive</b><span>Improves over time</span></div></div></div>
+      <div className="heroCopy"><div className="eyebrow"><i></i> ADAPTIVE TECH DISCOVERY</div><h1>Make your<br/><span>scroll smarter.</span></h1><p>Import videos from YouTube or Instagram and let TechScroll AI recommend tech-learning reels based on your interests — interleaved with hilarious funny developer reels!</p><div className="heroButtons"><button className="primaryBtn" onClick={()=>setPage("feed")}><CirclePlay size={18}/> Start Scrolling</button><button className="ghostBtn" onClick={onDemo}><Zap size={17}/> Launch AI Demo</button></div><div className="heroStats"><div><b>Passive</b><span>No manual history</span></div><div><b>YouTube / IG</b><span>Import any Reel</span></div><div><b>Funny Breaks</b><span>Humor interleaved</span></div></div></div>
       <HeroVisual/>
     </section>
-    <section className="problemSection" id="why"><div className="sectionHead"><div><span className="eyebrow">THE PROBLEM</span><h2>Students don't need less scrolling.<br/><span>They need better scrolling.</span></h2></div><p>Traditional recommendation systems optimize for similarity and engagement. TechScroll optimizes for technical growth.</p></div><div className="compare"><div className="compareCard muted"><span>TRADITIONAL RECOMMENDATION</span><div className="chain"><b>Watch Java</b><ArrowRight/><b>Keyword = Java</b><ArrowRight/><strong>More Java</strong></div><small>Optimizes for repetition.</small></div><div className="compareCard active"><span>TECHSCROLL AI</span><div className="chain"><b>Scroll</b><ArrowRight/><b>Understand</b><ArrowRight/><b>Infer</b><ArrowRight/><strong>Learn</strong></div><small>Optimizes for the next useful learning step.</small></div></div></section>
+    <section className="problemSection" id="why"><div className="sectionHead"><div><span className="eyebrow">THE PROBLEM</span><h2>Students don't need less scrolling.<br/><span>They need better scrolling.</span></h2></div><p>Traditional recommendation systems optimize for similarity and engagement. TechScroll optimizes for technical growth with funny breaks.</p></div><div className="compare"><div className="compareCard muted"><span>TRADITIONAL RECOMMENDATION</span><div className="chain"><b>Watch Java</b><ArrowRight/><b>Keyword = Java</b><ArrowRight/><strong>More Java</strong></div><small>Optimizes for repetition.</small></div><div className="compareCard active"><span>TECHSCROLL AI</span><div className="chain"><b>Scroll Tech</b><ArrowRight/><b>Understand</b><ArrowRight/><b>Funny Break 😂</b><ArrowRight/><strong>Learn & Grow</strong></div><small>Optimizes for technical discovery with humor.</small></div></div></section>
     <section className="javaSection" id="demo"><div className="sectionHead"><div><span className="eyebrow">THE BUILT-IN TRAP</span><h2>Don't confuse a topic<br/><span>with an interest.</span></h2></div><p>Four different signals can point to one broader interest. That's where semantic reasoning beats keyword matching.</p></div><div className="trapGrid"><div className="signalStack">{["Java meme","Software Engineer lifestyle","Coding interview","Developer laptop"].map((x,i)=><div className="signal" key={x}><span>0{i+1}</span><b>{x}</b><em>{[94,87,91,82][i]}% watched</em></div>)}</div><div className="reasoningCard"><div className="reasoningLine"></div><div className="brainCircle"><Brain/></div><div className="reasoningContent"><span>AI SYNTHESIS</span><h3>Software Engineering / Technology</h3><div className="confidence"><b>92%</b><span>confidence</span><div><i style={{width:"92%"}}/></div></div><div className="reject"><X size={15}/> More Java — rejected as too narrow</div><div className="recommend"><CheckCircle2 size={16}/><div><b>How HashMaps Actually Work</b><small>DSA · Intermediate · 92% match</small></div><ArrowRight size={16}/></div></div></div></div></section>
     <section className="featureSection" id="how"><div className="sectionHead center"><span className="eyebrow">THE AGENT</span><h2>From scrolling behavior<br/><span>to technical growth.</span></h2></div><div className="featureGrid">{[
       [Brain,"Passive interest discovery","The student never enters their history. Their behavior becomes the signal."],
-      [Network,"Semantic understanding","Connect Java, interviews, software engineering and hardware into broader concepts."],
+      [Video,"Import YouTube & Instagram","Paste any YouTube Short or Instagram Reel link to add to your feed."],
+      [Laugh,"Interleaved funny reels","Automatically inject comedy tech memes between learning reels to keep scroll fun."],
       [Target,"Skill-aware recommendations","Separate what a student likes from what they actually know."],
       [ShieldCheck,"Hype guard","Penalize exaggerated career claims and low-depth clickbait."],
-      [TrendingUp,"Knowledge gaps","Find what is missing in a learning path and recommend the next step."],
       [Gauge,"Continuous adaptation","Every watch, save and skip changes the next recommendation."]
     ].map(([I,t,d])=>{const Icon=I as any;return <div className="featureCard" key={String(t)}><div className="featureIcon"><Icon size={20}/></div><h3>{t as string}</h3><p>{d as string}</p></div>})}</div></section>
     <footer><div className="brand"><div className="logo"><Sparkles size={17}/></div><b>TechScroll <span>AI</span></b></div><p>Turn your scrolling habits into smarter tech discovery.</p><button onClick={()=>setPage("dashboard")}>Enter Dashboard <ArrowRight size={15}/></button></footer>
@@ -135,28 +163,65 @@ function Landing({setPage,onDemo}:{setPage:(p:Page)=>void;onDemo:()=>void}){
 }
 
 function HeroVisual(){
-  return <div className="heroVisual"><div className="orbit one"></div><div className="orbit two"></div><div className="aiCore"><div className="coreIcon"><Sparkles size={28}/></div><span>AI AGENT</span><b>Learning from<br/>your scrolling</b></div><div className="floatCard c1"><span>WATCH SIGNAL</span><b>94%</b><small>Java meme</small></div><div className="floatCard c2"><span>INTEREST</span><b>92%</b><small>Software Engineering</small></div><div className="floatCard c3"><span>NEXT BEST REEL</span><b>DSA</b><small>How HashMaps Work</small></div></div>
+  return <div className="heroVisual"><div className="orbit one"></div><div className="orbit two"></div><div className="aiCore"><div className="coreIcon"><Sparkles size={28}/></div><span>AI AGENT</span><b>Learning from<br/>your scrolling</b></div><div className="floatCard c1"><span>WATCH SIGNAL</span><b>94%</b><small>Java meme</small></div><div className="floatCard c2"><span>INTEREST</span><b>92%</b><small>Software Engineering</small></div><div className="floatCard c3"><span>FUNNY BREAK</span><b>MEME</b><small>Senior vs Junior Dev</small></div></div>
 }
 
-function Dashboard({profile,interest,gap,recs,setPage,onInteract}:{profile:StudentProfile;interest:{name:string;confidence:number};gap:string;recs:Recommendation[];setPage:(p:Page)=>void;onInteract:(r:Reel,p:Partial<Interaction>)=>void}){
-  const top=recs[0]?.reel ?? reels[5];
+function Dashboard({profile,interest,gap,recs,setPage,onInteract,onOpenImport}:{profile:StudentProfile;interest:{name:string;confidence:number};gap:string;recs:Recommendation[];setPage:(p:Page)=>void;onInteract:(r:Reel,p:Partial<Interaction>)=>void;onOpenImport:()=>void}){
+  const top=recs[0]?.reel ?? defaultReels[5];
   const watched=profile.interactions.length;
   return <div className="content">
-    <div className="welcome"><div><span className="eyebrow">AI LEARNING PROFILE</span><h1>Your scroll is <span>teaching the AI.</span></h1><p>{watched?`${watched} interaction${watched>1?"s":""} analyzed. Your recommendations are adapting in real time.`:"Start scrolling and TechScroll will learn your interests without asking you to fill out a profile."}</p></div><div className="activePill"><i/> AI ENGINE ACTIVE</div></div>
+    <div className="welcome">
+      <div>
+        <span className="eyebrow">AI LEARNING PROFILE</span>
+        <h1>Your scroll is <span>teaching the AI.</span></h1>
+        <p>{watched?`${watched} interaction${watched>1?"s":""} analyzed. Your recommendations adapt automatically with tech & funny reel interleaving.`:"Start scrolling or import videos from YouTube / Instagram to train your AI recommendations."}</p>
+      </div>
+      <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
+        <button className="importBtn" onClick={onOpenImport}><Plus size={15}/> Import Video</button>
+        <div className="activePill"><i/> AI ENGINE ACTIVE</div>
+      </div>
+    </div>
     <div className="dashboardGrid">
-      <section className="card bestReel"><div className="cardHeader"><div><span className="label">TODAY'S BEST REEL</span><h2>{top.title}</h2></div><span className="match">{Math.round(recs[0]?.score ?? 92)}% MATCH</span></div><div className="reelHero" style={{background:top.gradient}}><div className="playOrb"><Play fill="currentColor"/></div><div className="heroReelMeta"><b>{top.category}</b><span>{top.difficulty}</span><span>{top.duration}s</span></div></div><div className="metrics"><Metric label="Interest Match" value={Math.round(recs[0]?.breakdown["Interest Relevance"] ?? 92)}/><Metric label="Learning Value" value={top.educationalValue}/><Metric label="Skill Fit" value={Math.round(recs[0]?.breakdown["Difficulty Fit"] ?? 89)}/><Metric label="Skill Gain" value={8} suffix="%"/></div><div className="buttonRow"><button className="primaryBtn small" onClick={()=>setPage("feed")}>Watch Now <ArrowRight size={15}/></button><button className="ghostBtn small" onClick={()=>setPage("recommendations")}>Why this Reel?</button></div></section>
-      <section className="card profileCard"><div className="cardHeader"><div><span className="label">AI UNDERSTANDING YOU</span><h3>{interest.name}</h3></div><div className="bigConfidence">{interest.confidence}%<small>confidence</small></div></div><p className="mutedText">The AI combines semantic content signals with how you actually behave while scrolling.</p>{Object.entries(profile.interests).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=><Progress key={k} label={k} value={Math.round(v)}/>)}</section>
+      <section className="card bestReel">
+        <div className="cardHeader">
+          <div><span className="label">TODAY'S BEST REEL</span><h2>{top.title}</h2></div>
+          <span className="match">{Math.round(recs[0]?.score ?? 92)}% MATCH</span>
+        </div>
+        <div className="reelHero" style={{background:top.gradient}}>
+          {top.youtubeId ? (
+            <iframe className="videoEmbedIframe" src={`https://www.youtube-nocookie.com/embed/${top.youtubeId}?rel=0&modestbranding=1`} title={top.title} allowFullScreen />
+          ) : (
+            <div className="playOrb"><Play fill="currentColor"/></div>
+          )}
+          <div className="heroReelMeta"><b>{top.category}</b><span>{top.difficulty}</span><span>{top.duration}s</span>{top.isFunny && <b style={{color:"#ff7597"}}>😂 FUNNY</b>}</div>
+        </div>
+        <div className="metrics">
+          <Metric label="Interest Match" value={Math.round(recs[0]?.breakdown["Interest Relevance"] ?? 92)}/>
+          <Metric label="Learning Value" value={top.educationalValue}/>
+          <Metric label="Skill Fit" value={Math.round(recs[0]?.breakdown["Difficulty Fit"] ?? 89)}/>
+          <Metric label="Skill Gain" value={8} suffix="%"/>
+        </div>
+        <div className="buttonRow">
+          <button className="primaryBtn small" onClick={()=>setPage("feed")}>Watch Now <ArrowRight size={15}/></button>
+          <button className="ghostBtn small" onClick={()=>setPage("recommendations")}>Why this Reel?</button>
+        </div>
+      </section>
+      <section className="card profileCard">
+        <div className="cardHeader"><div><span className="label">AI UNDERSTANDING YOU</span><h3>{interest.name}</h3></div><div className="bigConfidence">{interest.confidence}%<small>confidence</small></div></div>
+        <p className="mutedText">The AI combines semantic content signals with how you actually behave while scrolling.</p>
+        {Object.entries(profile.interests).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=><Progress key={k} label={k} value={Math.round(v)}/>)}
+      </section>
     </div>
     <div className="dashboardGrid lower">
       <section className="card"><div className="cardHeader"><div><span className="label">TECHNICAL SKILLS</span><h3>What you know</h3></div><button className="linkBtn" onClick={()=>setPage("profile")}>View profile <ArrowRight size={14}/></button></div><div className="skillList">{Object.entries(profile.skills).slice(0,6).map(([k,v])=><div className="skillRow" key={k}><div><b>{k}</b><span>{v<40?"Beginner":v<70?"Intermediate":"Advanced"}</span></div><strong>{Math.round(v)}%</strong><div className="bar"><i style={{width:`${v}%`}}/></div></div>)}</div></section>
-      <section className="card reasoning"><div className="cardHeader"><div><span className="label">AI REASONING</span><h3>Why you're seeing this</h3></div><Sparkles className="spark" size={19}/></div><div className="reasonBlock"><CheckCircle2/><div><b>Interest detected</b><p>{interest.name} · {interest.confidence}% confidence</p></div></div><div className="reasonBlock"><Target/><div><b>Knowledge gap</b><p>{gap} is the next high-value learning area.</p></div></div><div className="reasonBlock"><TrendingUp/><div><b>Adaptive step</b><p>The next Reel is chosen to improve skill, not just repeat a topic.</p></div></div></section>
+      <section className="card reasoning"><div className="cardHeader"><div><span className="label">AI REASONING</span><h3>Why you're seeing this</h3></div><Sparkles className="spark" size={19}/></div><div className="reasonBlock"><CheckCircle2/><div><b>Interest detected</b><p>{interest.name} · {interest.confidence}% confidence</p></div></div><div className="reasonBlock"><Target/><div><b>Knowledge gap</b><p>{gap} is the next high-value learning area.</p></div></div><div className="reasonBlock"><Laugh/><div><b>Funny Reel Interleaving</b><p>Humor tech reels are automatically inserted to balance learning with entertainment.</p></div></div></section>
     </div>
     <section className="card activityCard"><div className="cardHeader"><div><span className="label">LIVE AGENT ACTIVITY</span><h3>What the AI is doing now</h3></div><div className="liveDot"><i/> LIVE</div></div><div className="activityList">{[
       ["Analyzed scrolling behavior",watched?`${watched} interactions processed`:"Waiting for first interaction"],
       ["Interest cluster",interest.name],
       ["Knowledge gap",gap],
       ["Top recommendation",top.title],
-      ["Recommendation confidence",`${interest.confidence}%`]
+      ["Reel Feed Mode","Tech Reels + Funny Reels Interleaved"]
     ].map(([a,b],i)=><div key={a as string}><span className="activityTime">0{i+1}</span><b>{a}</b><em>{b}</em></div>)}</div></section>
   </div>
 }
@@ -164,10 +229,13 @@ function Dashboard({profile,interest,gap,recs,setPage,onInteract}:{profile:Stude
 function Metric({label,value,suffix=""}:{label:string;value:number;suffix?:string}){return <div><span>{label}</span><b>{value}{suffix||"%"}</b></div>}
 function Progress({label,value}:{label:string;value:number}){return <div className="progress"><div><span>{label}</span><b>{value}%</b></div><div className="bar"><i style={{width:`${value}%`}}/></div></div>}
 
-function Feed({onInteract,profile}:{onInteract:(r:Reel,p:Partial<Interaction>)=>void;profile:StudentProfile}){
+function Feed({onInteract,profile,allReels,funnyInterval,setFunnyInterval,onOpenImport}:{onInteract:(r:Reel,p:Partial<Interaction>)=>void;profile:StudentProfile;allReels:Reel[];funnyInterval:number;setFunnyInterval:(n:number)=>void;onOpenImport:()=>void}){
   const [active,setActive]=useState(0);
   const [progress,setProgress]=useState<Record<string,number>>({});
   const timers=useRef<Record<string,number>>({});
+
+  const feedReels = useMemo(()=>getInterleavedFeed(profile, allReels, funnyInterval),[profile, allReels, funnyInterval]);
+
   function watch(r:Reel){
     timers.current[r.id]=Date.now();
   }
@@ -177,16 +245,331 @@ function Feed({onInteract,profile}:{onInteract:(r:Reel,p:Partial<Interaction>)=>
     setProgress(p=>({...p,[r.id]:Math.max(p[r.id]??0,pct)}));
     onInteract(r,{watchPercentage:pct,watchDuration:Math.min(duration,r.duration),skipped:pct<25});
   }
-  return <div className="feedPage"><div className="feedIntro"><span className="eyebrow">PASSIVE LEARNING FEED</span><h1>Just scroll. <span>We'll learn.</span></h1><p>No forms. No history upload. Your behavior is the input.</p></div><div className="feedViewport">{reels.map((r,i)=><div className={`reelSlide ${active===i?"current":""}`} key={r.id} style={{background:r.gradient}} onMouseEnter={()=>{setActive(i);watch(r)}} onMouseLeave={()=>leave(r)}><div className="reelShade"/><div className="reelContent"><div className="reelTop"><span className="categoryPill">{r.category}</span><span className="aiTag"><Sparkles size={13}/> AI analyzing</span></div><div className="reelCenter"><button className="bigPlay"><Play fill="white" size={27}/></button><div><span className="reelCreator">{r.creator}</span><h2>{r.title}</h2><p>{r.description}</p></div></div><div className="reelBottom"><div className="reelProgress"><i style={{width:`${progress[r.id]??0}%`}}/></div><div className="reelActions"><button onClick={()=>onInteract(r,{liked:true,watchPercentage:progress[r.id]??70})}><Heart size={22} fill={profile.liked.includes(r.id)?"currentColor":"none"}/><span>Like</span></button><button onClick={()=>onInteract(r,{saved:true,watchPercentage:progress[r.id]??70})}><Save size={22} fill={profile.saved.includes(r.id)?"currentColor":"none"}/><span>Save</span></button><button onClick={()=>onInteract(r,{notInterested:true,watchPercentage:progress[r.id]??15})}><X size={22}/><span>Not interested</span></button></div></div></div></div>)}</div><div className="feedHint">Scroll vertically to explore <ChevronRight size={15}/></div></div>
+
+  return <div className="feedPage">
+    <div className="feedHeaderControls">
+      <div>
+        <span className="eyebrow">PASSIVE ADAPTIVE FEED</span>
+        <h1 style={{margin:"4px 0",fontSize:"26px"}}>Smart Reel Feed <span>& Funny Breaks</span></h1>
+      </div>
+      <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
+        <div className="funnySelectGroup">
+          <Laugh size={15} style={{color:"#ff7597"}}/>
+          <span>Funny Reels Interleaving:</span>
+          <select value={funnyInterval} onChange={e=>setFunnyInterval(Number(e.target.value))}>
+            <option value={2}>Every 2 Tech Reels</option>
+            <option value={3}>Every 3 Tech Reels (Default)</option>
+            <option value={5}>Every 5 Tech Reels</option>
+            <option value={0}>Off (Tech Only)</option>
+          </select>
+        </div>
+        <button className="importBtn" onClick={onOpenImport}><Plus size={15}/> Import Reel</button>
+      </div>
+    </div>
+
+    <div className="feedViewport">
+      {feedReels.map((r,i)=>(
+        <div className={`reelSlide ${active===i?"current":""} ${r.isFunny?"funnyReelBorder":""}`} key={`${r.id}-${i}`} style={{background:r.gradient}} onMouseEnter={()=>{setActive(i);watch(r)}} onMouseLeave={()=>leave(r)}>
+          
+          {/* YouTube Video Player Embed */}
+          {r.embedType === "youtube" && r.youtubeId && (
+            <div className="videoEmbedContainer">
+              <iframe
+                className="videoEmbedIframe"
+                src={`https://www.youtube-nocookie.com/embed/${r.youtubeId}?autoplay=${active===i?1:0}&mute=0&controls=1&rel=0&modestbranding=1`}
+                title={r.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          )}
+
+          {/* Instagram Embed Preview */}
+          {r.embedType === "instagram" && (
+            <div className="videoEmbedContainer" style={{background:"radial-gradient(circle,#2d1537,#0d0b18)"}}>
+              <div className="instagramEmbedCard">
+                <Film size={42} style={{color:"#ff529a"}}/>
+                <h3>Instagram Reel</h3>
+                <p>"{r.title}"</p>
+                <a href={r.sourceUrl || "https://instagram.com"} target="_blank" rel="noreferrer" className="primaryBtn tiny" style={{display:"inline-flex",gap:"6px"}}>
+                  Open on Instagram <ExternalLink size={13}/>
+                </a>
+              </div>
+            </div>
+          )}
+
+          <div className="reelShade"/>
+          <div className="reelContent">
+            <div className="reelTop">
+              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                <span className="categoryPill">{r.category}</span>
+                {r.isFunny && <span className="funnyBadge">🎭 Tech Humor Break</span>}
+              </div>
+              <span className="aiTag"><Sparkles size={13}/> {r.isFunny?"Funny Intermission":"AI Analyzing"}</span>
+            </div>
+
+            <div className="reelCenter">
+              {(!r.embedType || r.embedType === "direct") && (
+                <button className="bigPlay"><Play fill="white" size={27}/></button>
+              )}
+              <div>
+                <span className="reelCreator">{r.creator}</span>
+                <h2>{r.title}</h2>
+                <p>{r.description}</p>
+                {r.sourceUrl && (
+                  <a href={r.sourceUrl} target="_blank" rel="noreferrer" style={{fontSize:"10px",color:"#9d96ff",display:"inline-flex",alignItems:"center",gap:"4px",marginTop:"6px"}}>
+                    <ExternalLink size={12}/> View original source
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="reelBottom">
+              <div className="reelProgress"><i style={{width:`${progress[r.id]??0}%`}}/></div>
+              <div className="reelActions">
+                <button onClick={()=>onInteract(r,{liked:true,watchPercentage:progress[r.id]??70})}><Heart size={22} fill={profile.liked.includes(r.id)?"currentColor":"none"}/><span>Like</span></button>
+                <button onClick={()=>onInteract(r,{saved:true,watchPercentage:progress[r.id]??70})}><Save size={22} fill={profile.saved.includes(r.id)?"currentColor":"none"}/><span>Save</span></button>
+                <button onClick={()=>onInteract(r,{notInterested:true,watchPercentage:progress[r.id]??15})}><X size={22}/><span>Not interested</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="feedHint">Scroll vertically to explore tech reels & funny breaks <ChevronRight size={15}/></div>
+  </div>
 }
 
 function Recommendations({recs,profile,onInteract}:{recs:Recommendation[];profile:StudentProfile;onInteract:(r:Reel,p:Partial<Interaction>)=>void}){
   const [selected,setSelected]=useState<Recommendation|null>(null);
-  return <div className="content"><div className="pageIntro"><span className="eyebrow">NEXT BEST REEL ENGINE</span><h1>What should you <span>learn next?</span></h1><p>Recommendations balance interest, skill improvement, difficulty, educational value, novelty and content quality.</p></div><div className="recommendGrid">{recs.map((r,i)=><div className="recommendCard" key={r.reel.id}><div className="rank">#{i+1}</div><div className="recommendVisual" style={{background:r.reel.gradient}}><span>{r.reel.category}</span><b>{Math.round(r.score)}%</b></div><div className="recommendBody"><div className="cardHeader"><div><h3>{r.reel.title}</h3><small>{r.reel.creator}</small></div><span className={`difficulty ${r.reel.difficulty.toLowerCase()}`}>{r.reel.difficulty}</span></div><p>{r.reason}</p><div className="recStats"><span><TrendingUp size={13}/> {r.reel.educationalValue}% learning</span><span><Target size={13}/> {Math.round(r.breakdown["Difficulty Fit"])}% fit</span><span><ShieldCheck size={13}/> {r.confidence}</span></div><div className="buttonRow"><button className="primaryBtn tiny" onClick={()=>onInteract(r.reel,{watchPercentage:95,watchDuration:r.reel.duration})}>Mark watched <CheckCircle2 size={14}/></button><button className="ghostBtn tiny" onClick={()=>setSelected(r)}>Score math</button></div></div></div>)}</div>{selected&&<ScoreModal rec={selected} close={()=>setSelected(null)}/>}</div>
+  return <div className="content">
+    <div className="pageIntro">
+      <span className="eyebrow">NEXT BEST REEL ENGINE</span>
+      <h1>What should you <span>learn next?</span></h1>
+      <p>Recommendations balance interest, skill improvement, difficulty, educational value, novelty and content quality.</p>
+    </div>
+    <div className="recommendGrid">
+      {recs.map((r,i)=>(
+        <div className={`recommendCard ${r.reel.isFunny?"funnyReelBorder":""}`} key={r.reel.id}>
+          <div className="rank">#{i+1}</div>
+          <div className="recommendVisual" style={{background:r.reel.gradient}}>
+            <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+              <span>{r.reel.category}</span>
+              {r.reel.isFunny && <span className="funnyTag">😂 Funny</span>}
+            </div>
+            <b>{Math.round(r.score)}%</b>
+          </div>
+          <div className="recommendBody">
+            <div className="cardHeader">
+              <div><h3>{r.reel.title}</h3><small>{r.reel.creator}</small></div>
+              <span className={`difficulty ${r.reel.difficulty.toLowerCase()}`}>{r.reel.difficulty}</span>
+            </div>
+            <p>{r.reason}</p>
+            <div className="recStats">
+              <span><TrendingUp size={13}/> {r.reel.educationalValue}% learning</span>
+              <span><Target size={13}/> {Math.round(r.breakdown["Difficulty Fit"])}% fit</span>
+              <span><ShieldCheck size={13}/> {r.confidence}</span>
+            </div>
+            <div className="buttonRow">
+              <button className="primaryBtn tiny" onClick={()=>onInteract(r.reel,{watchPercentage:95,watchDuration:r.reel.duration})}>Mark watched <CheckCircle2 size={14}/></button>
+              <button className="ghostBtn tiny" onClick={()=>setSelected(r)}>Score math</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    {selected&&<ScoreModal rec={selected} close={()=>setSelected(null)}/>}
+  </div>
 }
 
 function ScoreModal({rec,close}:{rec:Recommendation;close:()=>void}){
   return <div className="modalBackdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><button className="close" onClick={close}><X/></button><span className="eyebrow">EXPLAINABLE AI</span><h2>{rec.reel.title}</h2><div className="scoreHero"><b>{Math.round(rec.score)}%</b><span>recommendation match</span></div><div className="scoreRows">{Object.entries(rec.breakdown).map(([k,v])=><div key={k}><span>{k}</span><b className={k==="Hype Penalty"&&v>0?"danger":""}>{k==="Hype Penalty"?"-":""}{v}%</b></div>)}</div><div className="modalReason"><Sparkles size={17}/><p>{rec.reason}</p></div></div></div>
+}
+
+function ImportModal({onAddReel,close}:{onAddReel:(r:Reel)=>void;close:()=>void}){
+  const [url,setUrl] = useState("");
+  const [title,setTitle] = useState("");
+  const [creator,setCreator] = useState("@devcreator");
+  const [category,setCategory] = useState<Category>("AI");
+  const [isFunny,setIsFunny] = useState(false);
+  const [description,setDescription] = useState("");
+  const [educationalValue,setEducationalValue] = useState(85);
+  const [entertainmentValue,setEntertainmentValue] = useState(70);
+
+  function handleSubmit(e: React.FormEvent){
+    e.preventDefault();
+    if(!url || !title) return;
+    const parsed = parseVideoUrl(url);
+    const newReel: Reel = {
+      id: "custom_" + Date.now(),
+      title,
+      creator: creator || "@devcreator",
+      category: isFunny ? "Funny" : category,
+      topics: isFunny ? ["Developer Culture", "Humor"] : [category, "Software Engineering"],
+      relatedTopics: ["Technology", "Programming"],
+      context: isFunny ? "Funny programming meme" : "Imported video reel",
+      difficulty: "Intermediate",
+      technicalDepth: isFunny ? 15 : 75,
+      educationalValue: isFunny ? 25 : educationalValue,
+      careerRelevance: isFunny ? 35 : 80,
+      entertainmentValue: isFunny ? 95 : entertainmentValue,
+      hypeScore: 5,
+      duration: 30,
+      description: description || (isFunny ? "A funny developer reel imported from web." : "A tech video imported from web."),
+      gradient: isFunny ? "linear-gradient(135deg,#ff416c,#ff4b2b)" : "linear-gradient(135deg,#1f4037,#99f2c8)",
+      sourceUrl: parsed.cleanUrl,
+      embedType: parsed.embedType,
+      youtubeId: parsed.youtubeId,
+      isFunny,
+      isUserImported: true
+    };
+    onAddReel(newReel);
+    close();
+  }
+
+  function addSampleTechShort(){
+    const sample: Reel = {
+      id: "sample_yt_" + Date.now(),
+      title: "How HashMaps Work in 60 Seconds",
+      creator: "@techshorts",
+      category: "DSA",
+      topics: ["HashMap", "DSA", "Java"],
+      relatedTopics: ["Data Structures", "Algorithms"],
+      context: "Technical deep dive short",
+      difficulty: "Intermediate",
+      technicalDepth: 90,
+      educationalValue: 92,
+      careerRelevance: 88,
+      entertainmentValue: 60,
+      hypeScore: 4,
+      duration: 45,
+      description: "Hash functions, array indices, buckets, and collision resolution explained visually.",
+      gradient: "linear-gradient(135deg,#0b486b,#f56217)",
+      sourceUrl: "https://youtube.com/shorts/shW9i6k8CB0",
+      embedType: "youtube",
+      youtubeId: "shW9i6k8CB0",
+      isFunny: false,
+      isUserImported: true
+    };
+    onAddReel(sample);
+    close();
+  }
+
+  function addSampleFunnyShort(){
+    const sample: Reel = {
+      id: "sample_funny_" + Date.now(),
+      title: "POV: Senior Dev vs Junior Dev in Code Review",
+      creator: "@devjokes",
+      category: "Funny",
+      topics: ["Developer Culture", "Humor", "Programming"],
+      relatedTopics: ["Software Engineering"],
+      context: "Funny programmer meme",
+      difficulty: "Beginner",
+      technicalDepth: 10,
+      educationalValue: 20,
+      careerRelevance: 40,
+      entertainmentValue: 98,
+      hypeScore: 5,
+      duration: 25,
+      description: "When the junior developer pushes 5,000 lines of unformatted code 5 minutes before weekend deployment.",
+      gradient: "linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",
+      sourceUrl: "https://youtube.com/shorts/J---aiyznGQ",
+      embedType: "youtube",
+      youtubeId: "J---aiyznGQ",
+      isFunny: true,
+      isUserImported: true
+    };
+    onAddReel(sample);
+    close();
+  }
+
+  return <div className="modalBackdrop" onClick={close}>
+    <div className="modal" onClick={e=>e.stopPropagation()} style={{width:"min(580px,100%)"}}>
+      <button className="close" onClick={close}><X/></button>
+      <span className="eyebrow" style={{display:"flex",alignItems:"center",gap:"6px"}}>
+        <Plus size={14} style={{color:"#e91e63"}}/> IMPORT YOUTUBE OR INSTAGRAM VIDEO
+      </span>
+      <h2 style={{margin:"6px 0 16px"}}>Add Video / Reel to Feed</h2>
+
+      <form onSubmit={handleSubmit} className="importForm">
+        <div className="formGroup">
+          <label>YOUTUBE OR INSTAGRAM REEL URL</label>
+          <input
+            className="formInput"
+            type="url"
+            placeholder="e.g. https://youtube.com/shorts/... or https://instagram.com/reel/..."
+            value={url}
+            onChange={e=>{
+              setUrl(e.target.value);
+              if(!title && e.target.value){
+                const p = parseVideoUrl(e.target.value);
+                if(p.embedType === "youtube") setTitle("Imported YouTube Reel");
+                else if(p.embedType === "instagram") setTitle("Imported Instagram Reel");
+              }
+            }}
+            required
+          />
+        </div>
+
+        <div className="formGroup">
+          <label>REEL TITLE</label>
+          <input className="formInput" type="text" placeholder="Title of the video/reel" value={title} onChange={e=>setTitle(e.target.value)} required />
+        </div>
+
+        <div className="formRow">
+          <div className="formGroup">
+            <label>CATEGORY</label>
+            <select className="formSelect" value={category} onChange={e=>setCategory(e.target.value as Category)}>
+              <option value="AI">AI / Machine Learning</option>
+              <option value="DSA">DSA / Algorithms</option>
+              <option value="Java">Java</option>
+              <option value="HLD">System Design (HLD)</option>
+              <option value="Cybersecurity">Cybersecurity</option>
+              <option value="Cloud">Cloud & DevOps</option>
+              <option value="Programming">Web & Programming</option>
+              <option value="Hardware">Developer Hardware</option>
+              <option value="Funny">Funny / Tech Meme</option>
+            </select>
+          </div>
+          <div className="formGroup">
+            <label>CREATOR HANDLE</label>
+            <input className="formInput" type="text" placeholder="@username" value={creator} onChange={e=>setCreator(e.target.value)} />
+          </div>
+        </div>
+
+        <label className="formCheck">
+          <input type="checkbox" checked={isFunny} onChange={e=>{setIsFunny(e.target.checked); if(e.target.checked) setCategory("Funny");}} />
+          <span style={{fontSize:"12px",color:"#fff",fontWeight:600}}>
+            🎭 Is this a Funny Reel / Tech Meme? (Will be automatically interleaved in middle of feed)
+          </span>
+        </label>
+
+        <div className="formGroup">
+          <label>DESCRIPTION (OPTIONAL)</label>
+          <input className="formInput" type="text" placeholder="Short description of video content" value={description} onChange={e=>setDescription(e.target.value)} />
+        </div>
+
+        <div className="sampleImportBox">
+          <p>Don't have a URL ready? Add one of our pre-configured sample videos:</p>
+          <div style={{display:"flex",gap:"10px",justifyContent:"center",flexWrap:"wrap"}}>
+            <button type="button" className="sampleBtn" onClick={addSampleTechShort}>
+              <Video size={13}/> + Sample Tech YouTube Short
+            </button>
+            <button type="button" className="sampleBtn" onClick={addSampleFunnyShort} style={{borderColor:"#ff4b72",color:"#ff8da7"}}>
+              <Laugh size={13}/> + Sample Funny Developer Meme Short
+            </button>
+          </div>
+        </div>
+
+        <div className="buttonRow" style={{marginTop:"10px"}}>
+          <button type="submit" className="primaryBtn" style={{flex:1}}>
+            <Plus size={16}/> Import Video to Feed
+          </button>
+          <button type="button" className="ghostBtn" onClick={close}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
 }
 
 function Learning({profile,gap,recs}:{profile:StudentProfile;gap:string;recs:Recommendation[]}){
@@ -218,7 +601,7 @@ function Architecture(){
     ["05","Skill Estimation","Separate interest from knowledge.",Gauge],
     ["06","Knowledge Gaps","Find missing prerequisites.",Target],
     ["07","Recommendation Scoring","Rank the next best Reel.",Sparkles],
-    ["08","Hype Guard","Reduce low-value clickbait.",ShieldCheck],
+    ["08","Funny Interleaving","Inject tech humor reels in middle.",Laugh],
     ["09","Feedback Loop","Every scroll updates the model.",RefreshCw]
   ];
   return <div className="content"><div className="pageIntro"><span className="eyebrow">SYSTEM ARCHITECTURE</span><h1>From a scroll <span>to a learning decision.</span></h1><p>The recommendation loop is explainable, modular and reliable without an external API.</p></div><div className="architectureFlow">{nodes.map(([n,t,d,I],i)=>{const Icon=I as any;return <div className="archNode" key={n as string}><div className="archNum">{n as string}</div><div className="archIcon"><Icon size={19}/></div><div><h3>{t as string}</h3><p>{d as string}</p></div>{i<nodes.length-1&&<ArrowRight className="archArrow"/>}</div>})}</div><div className="card formula"><span className="label">RECOMMENDATION FORMULA</span><h2>Score = Interest + Skill Improvement + Fit + Learning Value + Career + Novelty − Hype</h2><p>The weights are configurable so the judge can see that engagement alone does not decide the result.</p></div></div>
@@ -233,7 +616,7 @@ function DemoOverlay({step,setStep,close}:{step:number;setStep:(s:number)=>void;
     ["05","AI synthesis","92% confidence","Software Engineering / Technology"],
     ["06","Keyword trap rejected","Too narrow","More Java recommendation rejected"],
     ["07","Hype Guard","92 hype score","Low-depth career hype penalized"],
-    ["08","Next Best Reel","92% match","How HashMaps Actually Work"],
+    ["08","Funny Interleaving","Interleaved","Senior vs Junior Dev meme break added"],
     ["09","Skill update","48% → 56%","DSA skill increased"],
     ["10","Next learning step","Recommended","Stacks & Queues Explained"]
   ];
